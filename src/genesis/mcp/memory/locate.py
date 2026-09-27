@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from genesis import env
+from genesis.session_awareness.zero_drop_git import scrubbed_git_env
 
 from ..memory import mcp
 
@@ -119,7 +120,8 @@ def _list_worktrees(repo_root: Path) -> list[Path]:
     try:
         result = subprocess.run(
             ["git", "worktree", "list", "--porcelain"],
-            capture_output=True, text=True, cwd=str(repo_root), timeout=10,
+            capture_output=True, cwd=str(repo_root), timeout=10,
+            env=scrubbed_git_env(),
         )
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return []
@@ -127,12 +129,13 @@ def _list_worktrees(repo_root: Path) -> list[Path]:
         return []
     paths: list[Path] = []
     is_first = True
-    for line in result.stdout.splitlines():
-        if line.startswith("worktree "):
+    for line_bytes in result.stdout.splitlines():
+        if line_bytes.startswith(b"worktree "):
+            path_bytes = line_bytes[len(b"worktree "):]
             if is_first:
                 is_first = False  # first entry is the main worktree — skip
             else:
-                paths.append(Path(line[len("worktree "):]))
+                paths.append(Path(os.fsdecode(path_bytes)))
     return paths
 
 
@@ -427,7 +430,12 @@ async def _impl_locate(
     # When git is unavailable or fails, _list_worktrees returns [] (fail-open):
     # repo scope scanning falls back to standard directory pruning without excluding linked worktrees,
     # ensuring the locate MCP tool remains functional even without git.
-    prune_wts = {p.resolve() for p in _list_worktrees(env.repo_root())} if scope in ("repo", "all") else set()
+    if scope == "all":
+        prune_wts = {path.resolve() for label, path in roots if label.startswith("worktree:")}
+    elif scope == "repo":
+        prune_wts = {p.resolve() for p in _list_worktrees(env.repo_root())}
+    else:
+        prune_wts = set()
 
     for label, path in roots:
         if not path.is_dir():
