@@ -41,9 +41,6 @@ def test_destructive_guard_does_not_exempt_worktrees(tmp_path):
     _init_repo(repo)
 
     wt_path = tmp_dir / "wt"
-    parts = [p for p in str(wt_path).split("/") if p]
-    if len(parts) >= 4:
-        pytest.skip(f"cannot create a shallow path (< 4 components): {wt_path} has depth {len(parts)}")
 
     subprocess.run(
         ["git", "-C", str(repo), "worktree", "add", "-b", "wt-branch", str(wt_path)],
@@ -53,10 +50,10 @@ def test_destructive_guard_does_not_exempt_worktrees(tmp_path):
     plain_dir = tmp_dir / "plain"
     plain_dir.mkdir()
 
-    plain_reason = _check_target(str(plain_dir))
+    plain_reason = _check_target(str(plain_dir.relative_to(tmp_dir)))
     assert plain_reason is not None and "too broad" in plain_reason
 
-    wt_reason = _check_target(str(wt_path))
+    wt_reason = _check_target(str(wt_path.relative_to(tmp_dir)))
     assert wt_reason is not None and "too broad" in wt_reason
 
 
