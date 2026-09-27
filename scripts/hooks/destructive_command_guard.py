@@ -7,7 +7,7 @@ deep (e.g., /home/user/project/some_dir) to pass.
 
 Blocks:  rm -rf /  |  rm -r -f ~  |  rm --recursive --force .  |
          rm -Rf ~/project  |  rm -rf -- /  |  rm -rf deep/path /
-Allows:  rm -rf /home/user/project/.claude/worktrees/old-branch
+Allows:  rm -rf /home/user/project/build/cache
 
 Parsing is token-based (shlex): flags accumulate across tokens, `--`
 ends flag parsing, and every operand is depth-checked individually —
@@ -637,6 +637,11 @@ def _check_target(target: str) -> str | None:
     # review: this was a live bypass.)
     if ".." in parts:
         return f"rm -rf on '{clean}' traverses upward ('..') — refusing."
+    # #2424: no worktree exemption, and git is never consulted. A linked worktree
+    # is judged by the same depth rule wherever it lives, so git availability
+    # cannot change a verdict. (A git-based exemption was rejected: a relative
+    # target would be resolved against the hook's cwd, which need not match the
+    # Bash invocation's.)
     if len(parts) < 4:
         return f"rm -rf on '{clean}' (depth {len(parts)}) is too broad."
     return None
