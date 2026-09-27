@@ -12,9 +12,7 @@ Covers:
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -35,38 +33,31 @@ def _init_repo(path: Path) -> None:
     subprocess.run(["git", "-C", str(path), "commit", "-m", "initial commit"], check=True, env=scrubbed_git_env())
 
 
-def test_destructive_guard_does_not_exempt_worktrees():
+def test_destructive_guard_does_not_exempt_worktrees(tmp_path):
     """Verify shallow linked worktrees (depth < 4) are refused like plain directories."""
-    tmp_dir = Path(tempfile.mkdtemp(dir="/tmp"))
-    repo = None
-    wt_path = None
-    try:
-        repo = tmp_dir / "repo"
-        repo.mkdir()
-        _init_repo(repo)
+    tmp_dir = tmp_path
+    repo = tmp_dir / "repo"
+    repo.mkdir()
+    _init_repo(repo)
 
-        wt_path = tmp_dir / "wt"
-        parts = [p for p in str(wt_path).split("/") if p]
-        if len(parts) >= 4:
-            pytest.skip(f"cannot create a shallow path (< 4 components): {wt_path} has depth {len(parts)}")
+    wt_path = tmp_dir / "wt"
+    parts = [p for p in str(wt_path).split("/") if p]
+    if len(parts) >= 4:
+        pytest.skip(f"cannot create a shallow path (< 4 components): {wt_path} has depth {len(parts)}")
 
-        subprocess.run(
-            ["git", "-C", str(repo), "worktree", "add", "-b", "wt-branch", str(wt_path)],
-            check=True, capture_output=True, env=scrubbed_git_env(),
-        )
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-b", "wt-branch", str(wt_path)],
+        check=True, capture_output=True, env=scrubbed_git_env(),
+    )
 
-        plain_dir = tmp_dir / "plain"
-        plain_dir.mkdir()
+    plain_dir = tmp_dir / "plain"
+    plain_dir.mkdir()
 
-        plain_reason = _check_target(str(plain_dir))
-        assert plain_reason is not None and "too broad" in plain_reason
+    plain_reason = _check_target(str(plain_dir))
+    assert plain_reason is not None and "too broad" in plain_reason
 
-        wt_reason = _check_target(str(wt_path))
-        assert wt_reason is not None and "too broad" in wt_reason
-    finally:
-        if repo and wt_path and wt_path.exists():
-            subprocess.run(["git", "-C", str(repo), "worktree", "remove", "--force", str(wt_path)], capture_output=True, env=scrubbed_git_env())
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+    wt_reason = _check_target(str(wt_path))
+    assert wt_reason is not None and "too broad" in wt_reason
 
 
 @pytest.mark.asyncio
